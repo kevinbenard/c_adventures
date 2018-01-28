@@ -1,92 +1,83 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
 #include <string.h>
 #include <ctype.h>
 
+#include "todo.h"
+
 #define COMMENT_SIZE 127
+#define TODO_POOL_SIZE 10
 
-typedef struct {
-    uint8_t index;
-    char* comment;
-    uint8_t priority;
-} todo_item;
+// Load data into structures
+todo_item todo_items[TODO_POOL_SIZE];
+int todo_count = 0;
 
-int main(int argc, char** argv) {
-
-    FILE* mainFile = fopen("data.db", "r+");
+todo_item* todo_init(char* databaseFile) {
+    FILE* mainFile = fopen(databaseFile, "r+");
     if (!mainFile) {
-        mainFile = fopen("data.db", "w");
+        mainFile = fopen(databaseFile, "w");
     }
 
-    // Load data into structures
-    todo_item todo_items[10];
     char buf[COMMENT_SIZE];
-    uint8_t index = 0;
     // TODO: Replace with fread()
     while(fgets(buf, sizeof(buf), mainFile) != NULL) {
-        todo_items[index].index = index + 1;
+        todo_items[todo_count].index = todo_count + 1;
         char* comment = malloc(sizeof(buf));
         comment = strncpy(comment, buf+4, sizeof(buf));
-        todo_items[index].comment = comment;
+        todo_items[todo_count].comment = comment;
 
         char* pri = malloc(4 * sizeof(buf[0]));
         pri = strncpy(pri, buf+1, 1);
-        todo_items[index].priority = atoi(pri);
-        index += 1;
-    }
-
-    if (feof(mainFile)) {
-        // printf("Finished!\n");
+        todo_items[todo_count].priority = atoi(pri);
+        todo_count += 1;
     }
 
     fclose(mainFile);
 
-    if (argc == 2 && strncmp(argv[1], "-l", 2) == 0) {
-        // Print items
-        for (int i = 0; i < index; i++) {
-            printf("%d. [%d]: %s",
-                    todo_items[i].index, 
-                    todo_items[i].priority, 
-                    todo_items[i].comment);
-        }
-    } else if (argc >= 2) {
-        // Append todo to files + array
-        int start = 0;
-        char line[255]; // TODO: Do something better than 255
-        int priority = 0;
-        if (isdigit(argv[1][0])) {
-            priority = atoi(argv[1]);
-            argv++;
-            argc--;
-        }
+    return todo_items;
+}
 
-        sprintf(&line[start], "[%d] ", priority); 
-        start += 4;
-        // TODO: Make this support double-digit priorities
-        // TODO: Only shift argv if there was a priority specified
-        for (int i = 1; i < argc; i++) {
-            int len = strlen(argv[i]);
-            sprintf(&line[start], "%s%s", argv[i], " ");
-            start += len + 1;
-        }
-        printf("Line: %s\n", line);
-        // printf("Size: %d\n", argc);
+int todo_size(todo_item* items) {
+    (void) items;
+    return todo_count;
+}
 
-        mainFile = fopen("data.db", "a+");
-        if (!mainFile) {
-            printf("Error opening data.db file!\n");
-            return 1;
-        }
+void todo_add_item(todo_item* items, todo_item* item) {
+    items[todo_count] = *item;
+    todo_count += 1;
 
-        fprintf(mainFile, "%s\n", line);
-
-        fclose(mainFile);
-
-    } else {
-        // Catch all
-        printf("In else...\n");
+    FILE* mainFile = fopen("data.db", "a+");
+    if (!mainFile) {
+        printf("Error opening data.db file!\n");
     }
 
-    return 0;
+    fprintf(mainFile, "[%d] %s\n", item->priority, item->comment);
+
+    fclose(mainFile);
+}
+
+todo_item* todo_create_item(int words, char** line) {
+    // Append todo to files + array
+    int start = 0;
+    char* line_buffer = malloc(255);
+    int priority = 0;
+    if (isdigit(line[1][0])) {
+        priority = atoi(line[0]);
+        line++;
+        words--;
+    }
+
+    // TODO: Make this support double-digit priorities
+    for (int i = 1; i < words; i++) {
+        int len = strlen(line[i]);
+        sprintf(&line_buffer[start], "%s%s", line[i], " ");
+        start += len + 1;
+    }
+
+    todo_item* new_item = malloc(sizeof(todo_item));
+    new_item->index = todo_size(todo_items) + 1; 
+    new_item->priority = priority;
+    new_item->comment = line_buffer;
+
+    return new_item;
 }
